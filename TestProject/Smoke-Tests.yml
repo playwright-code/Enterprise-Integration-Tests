@@ -1,0 +1,67 @@
+trigger:
+- main
+
+pool: VINDU88
+  vmImage: 'windows-latest'
+
+variables:
+  buildConfiguration: 'Release'
+  solution: 'TestProject\TestProject.sln'
+  testProject: 'Automated-Integration-Tests\TestProject'
+
+jobs:
+- job: BuildAndTest
+  displayName: 'Build, Test, and Generate Allure Report'
+  steps:
+
+    # Step 1: Checkout the code
+    - task: Checkout@1
+      displayName: 'Checkout repository'
+
+    # Step 2: Install .NET SDK
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '6.x'
+        installationPath: $(Agent.ToolsDirectory)/dotnet
+
+    # Step 3: Restore NuGet packages
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore NuGet packages'
+      inputs:
+        command: 'restore'
+        projects: $(solution)
+
+    # Step 4: Build the solution
+    - task: DotNetCoreCLI@2
+      displayName: 'Build the solution'
+      inputs:
+        command: 'build'
+        projects: $(solution)
+        arguments: '--configuration $(buildConfiguration)'
+
+    # Step 5: Install Allure Commandline tool
+    - script: |
+        echo Installing Allure Commandline...
+        npm install -g allure-commandline --save-dev
+      displayName: 'Install Allure Commandline'
+
+    # Step 6: Run the tests and generate Allure results
+    - task: DotNetCoreCLI@2
+      displayName: 'Run Playwright Tests and Generate Allure Results'
+      inputs:
+        command: 'test'
+        projects: $(testProject)
+        arguments: '--configuration $(buildConfiguration) --logger:"allure"'
+
+    # Step 7: Publish Allure report
+    - script: |
+        allure generate ./allure-results --clean -o ./allure-report
+        allure open ./allure-report
+      displayName: 'Generate Allure Report'
+
+    # Step 8: Publish the Allure report as a pipeline artifact
+    - publish: ./allure-report
+      artifact: allure-report
+      displayName: 'Publish Allure Report Artifact'
